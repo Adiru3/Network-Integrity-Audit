@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Network Audit</title>
+    <style>
+        :root {
+            --bg: #0d1117; --card: #161b22; --accent: #f59e0b; --text: #e6edf3;
+            --success: #238636; --warning: #d29922; --danger: #da3633; --info: #58a6ff;
+        }
+        body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); padding: 20px; display: flex; justify-content: center; }
+        .app-container { max-width: 1150px; width: 100%; background: var(--card); border-radius: 12px; padding: 25px; border: 1px solid #30363d; box-shadow: 0 10px 40px rgba(0,0,0,0.6); }
+        
+        .header { text-align: center; border-bottom: 1px solid #30363d; margin-bottom: 20px; padding-bottom: 15px; }
+        .header h1 { color: var(--accent); margin: 0; font-size: 30px; text-transform: uppercase; letter-spacing: 2px; }
+        
+        .setup-row { display: flex; gap: 15px; align-items: center; justify-content: center; margin-bottom: 20px; background: #0d1117; padding: 15px; border-radius: 10px; flex-wrap: wrap; border: 1px dashed #444; }
+        input, select { background: #1c2128; border: 1px solid #444; color: #fff; padding: 10px; border-radius: 6px; width: 95px; text-align: center; font-weight: bold; }
+
+        .dashboard { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 12px; margin-bottom: 20px; }
+        .stat-card { background: #0d1117; padding: 15px; border-radius: 10px; border: 1px solid #30363d; text-align: center; transition: 0.3s; }
+        .stat-card.highlight { border-color: var(--accent); background: rgba(245, 158, 11, 0.05); }
+        .stat-card.bloat { border-color: var(--danger); background: rgba(218, 54, 51, 0.05); }
+        .stat-card .val { font-size: 20px; font-weight: 800; display: block; color: #fff; }
+        .stat-card .label { font-size: 9px; color: #8b949e; text-transform: uppercase; margin-top: 5px; display: block; }
+
+        .canvas-container { position: relative; width: 100%; height: 180px; margin-bottom: 20px; }
+        canvas { width: 100%; height: 100%; background: #010409; border-radius: 8px; border: 1px solid #30363d; }
+        .baseline-overlay { position: absolute; top: 10px; right: 10px; font-size: 10px; color: var(--info); background: rgba(0,0,0,0.6); padding: 5px 10px; border-radius: 4px; display: none; }
+
+        .btn-group { display: grid; grid-template-columns: 2fr 1fr 1fr 1.5fr; gap: 10px; margin-bottom: 20px; }
+        .btn { padding: 18px; font-size: 12px; font-weight: 800; border-radius: 8px; cursor: pointer; transition: 0.3s; border: none; text-transform: uppercase; }
+        .btn-main { background: linear-gradient(135deg, var(--accent), #d97706); color: #000; }
+        .btn-secondary { background: #30363d; color: #fff; border: 1px solid #444; }
+        .btn-secondary.active { background: var(--danger); }
+        .btn-info { background: var(--info); color: #000; }
+        .btn-bloat { background: #444; color: #fff; border: 1px solid #666; }
+        .btn-bloat.active { background: var(--danger); animation: pulse 1.5s infinite; }
+
+        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.7; } 100% { opacity: 1; } }
+
+        .comparison-bar { background: #0d1117; padding: 15px; border-radius: 10px; margin-bottom: 20px; border: 1px solid var(--info); display: none; }
+        .comparison-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; text-align: center; }
+        .comp-val { font-weight: bold; }
+        .improvement { color: var(--success); }
+        .regression { color: var(--danger); }
+
+        .report { margin-top: 25px; padding: 25px; border-radius: 12px; display: none; background: rgba(0,0,0,0.2); border: 1px solid #444; }
+        .grade-box { font-size: 70px; font-weight: 900; text-align: center; margin-bottom: 20px; }
+        
+        .analytics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; }
+        .analysis-box { background: #1c2128; padding: 18px; border-radius: 10px; border-left: 4px solid var(--info); }
+        .analysis-box h4 { margin: 0 0 12px 0; color: var(--accent); font-size: 14px; text-transform: uppercase; }
+        .analysis-box p { font-size: 13px; line-height: 1.6; margin: 8px 0; color: #adbac7; }
+        
+        .log { margin-top: 20px; font-family: monospace; font-size: 11px; color: #768390; max-height: 100px; overflow-y: auto; background: #010409; padding: 15px; border-radius: 8px; border: 1px solid #30363d; }
+    </style>
+</head>
+<body>
+
+<div class="app-container">
+    <div class="header">
+        <h1>Network Integrity Audit <span style="font-size: 14px; color: var(--info);"></span></h1>
+        <p style="font-size: 14px; color: #8b949e;">Bufferbloat Simulation • Loss Pattern Analysis • MTU Sensitivity</p>
+    </div>
+
+    <div class="setup-row">
+        <div><label>Time:</label> <input type="number" id="duration" value="60">s</div>
+        <div><label>Tick-Rate:</label> <input type="number" id="tickrate" value="128"></div>
+        <div><label>MTU Test:</label> 
+            <select id="mtuMode">
+                <option value="on">Enabled</option>
+                <option value="off">Disabled</option>
+            </select>
+        </div>
+        <div><label>Server:</label> <select id="target"><option value="google">Google</option><option value="cloudflare">Cloudflare</option></select></div>
+    </div>
+
+    <div class="comparison-bar" id="comparisonBar">
+        <div style="font-size: 10px; text-transform: uppercase; margin-bottom: 10px; color: var(--info);">Comparison with Baseline</div>
+        <div class="comparison-grid" id="comparisonGrid"></div>
+    </div>
+
+    <div class="canvas-container">
+        <canvas id="pingChart"></canvas>
+        <div class="baseline-overlay" id="baselineOverlay">Baseline Loaded</div>
+    </div>
+
+    <div class="dashboard">
+        <div class="stat-card"><span class="val" id="cur-ping">--</span><span class="label">Latency (ms)</span></div>
+        <div class="stat-card"><span class="val" id="stddev">--</span><span class="label">Std Dev (σ)</span></div>
+        <div class="stat-card highlight"><span class="val" id="input-lag">--</span><span class="label">Predicted Lag</span></div>
+        <div class="stat-card"><span class="val" id="loss-burst">0</span><span class="label">Max Burst Loss</span></div>
+        <div class="stat-card"><span class="val" id="loss-interval">--</span><span class="label">Avg Loss Gap</span></div>
+        <div class="stat-card bloat"><span class="val" id="bloat-score">0ms</span><span class="label">Bloat Delta</span></div>
+        <div class="stat-card"><span class="val" id="mtu-impact">--</span><span class="label">MTU Impact Δ</span></div>
+    </div>
+
+    <div class="btn-group">
+        <button class="btn btn-main" id="startBtn" onclick="runAudit()">Run Ultra Audit</button>
+        <button class="btn btn-secondary" id="baselineBtn" onclick="saveBaseline()">Save Baseline</button>
+        <button class="btn btn-secondary" id="stressBtn" onclick="toggleStress()">Stress: OFF</button>
+        <button class="btn btn-bloat" id="bloatBtn" onclick="toggleBloat()">Bufferbloat: OFF</button>
+    </div>
+
+    <div id="report" class="report">
+        <div id="grade-val" class="grade-box">--</div>
+        
+        <div style="margin-bottom: 25px;">
+            <h4 style="color: var(--info); font-size: 12px; text-transform: uppercase; text-align: center;">Esports Performance Standards</h4>
+            <table style="width: 100%; border-collapse: collapse; font-size: 12px; text-align: center; background: #1c2128; border-radius: 8px; overflow: hidden;">
+                <thead>
+                    <tr style="background: #30363d;">
+                        <th style="padding: 10px;">Metric</th>
+                        <th style="color: var(--success);">Ideal (Pro)</th>
+                        <th style="color: var(--warning);">Acceptable</th>
+                        <th style="color: var(--danger);">Critical</th>
+                        <th>Your Result</th>
+                    </tr>
+                </thead>
+                <tbody id="comparisonTableBody">
+                    </tbody>
+            </table>
+        </div>
+
+        <div class="analytics-grid" id="analyticsGrid"></div>
+        <button class="btn btn-info" style="width:100%; margin-top:20px;" onclick="exportAudit()">Export Full Report</button>
+    </div>
+
+    <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #30363d; display: flex; justify-content: center; gap: 20px; flex-wrap: wrap;">
+            <a href="https://github.com/Adiru3" target="_blank" style="color: #8b949e; text-decoration: none; font-size: 13px; display: flex; align-items: center; gap: 5px;">
+                <svg height="16" width="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"></path></svg>
+                GitHub
+            </a>
+            <a href="https://www.youtube.com/@adiruaim" target="_blank" style="color: #ff0000; text-decoration: none; font-size: 13px; font-weight: bold;">YouTube</a>
+            <a href="https://www.tiktok.com/@adiruhs" target="_blank" style="color: #fff; text-decoration: none; font-size: 13px; font-weight: bold;">TikTok</a>
+            <a href="https://donatello.to/Adiru3" target="_blank" style="color: var(--accent); text-decoration: none; font-size: 13px; font-weight: bold;">Support (Donatello)</a>
+        </div>
+    </div>
+
+<script>
+let chartData = [];
+let baselineStats = null;
+let isStressActive = false;
+let isBloatActive = false;
+let bloatInterval = null;
+let packetCounter = 0;
+let lastReceivedId = -1;
+let currentBurstLoss = 0;
+let maxBurstLoss = 0;
+let lastLossIndex = -1;
+let lossIntervals = [];
+let mtuSmallPings = [];
+let mtuLargePings = [];
+let initialPingBaseline = 0;
+
+const ctx = document.getElementById('pingChart').getContext('2d');
+
+function toggleStress() {
+    isStressActive = !isStressActive;
+    const btn = document.getElementById('stressBtn');
+    btn.innerText = isStressActive ? "Stress: ON" : "Stress: OFF";
+    btn.classList.toggle('active');
+}
+
+function toggleBloat() {
+    isBloatActive = !isBloatActive;
+    const btn = document.getElementById('bloatBtn');
+    btn.innerText = isBloatActive ? "Bufferbloat: ON" : "Bufferbloat: OFF";
+    btn.classList.toggle('active');
+    
+    if (isBloatActive) {
+        // Симулируем тяжелую загрузку (много параллельных запросов)
+        bloatInterval = setInterval(() => {
+            const target = document.getElementById('target').value === 'google' ? 'https://www.google.com/generate_204' : 'https://1.1.1.1/cdn-cgi/trace';
+            for(let i=0; i<5; i++) {
+                fetch(target, { mode: 'no-cors', cache: 'no-store' }).catch(()=>{});
+            }
+        }, 100);
+    } else {
+        clearInterval(bloatInterval);
+    }
+}
+
+function saveBaseline() {
+    if (chartData.length === 0) { alert("Run a test first!"); return; }
+    baselineStats = {
+        avg: chartData.reduce((a,b)=>a+b,0)/chartData.length,
+        stdDev: parseFloat(document.getElementById('stddev').innerText),
+        inputLag: parseFloat(document.getElementById('input-lag').innerText)
+    };
+    document.getElementById('baselineOverlay').style.display = 'block';
+    document.getElementById('baselineBtn').innerText = "Baseline Saved ✓";
+}
+
+function drawChart() {
+    ctx.clearRect(0,0,ctx.canvas.width, ctx.canvas.height);
+    if (chartData.length === 0) return;
+    const maxPing = Math.max(...chartData, 100);
+    const scale = (ctx.canvas.height - 20) / maxPing;
+    
+    ctx.strokeStyle = '#161b22'; ctx.beginPath();
+    for(let i=0; i<5; i++) {
+        let y = ctx.canvas.height - (i * 20 * scale);
+        ctx.moveTo(0, y); ctx.lineTo(ctx.canvas.width, y);
+    }
+    ctx.stroke();
+
+    ctx.strokeStyle = isBloatActive ? '#da3633' : '#f59e0b';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    let xStep = ctx.canvas.width / 100;
+    chartData.slice(-100).forEach((d, i) => {
+        let y = ctx.canvas.height - (d * scale);
+        if(i===0) ctx.moveTo(i*xStep, y); else ctx.lineTo(i*xStep, y);
+    });
+    ctx.stroke();
+}
+
+async function runAudit() {
+    const duration = parseInt(document.getElementById('duration').value);
+    const tickrate = parseInt(document.getElementById('tickrate').value);
+    const mtuEnabled = document.getElementById('mtuMode').value === 'on';
+    const target = document.getElementById('target').value === 'google' ? 'https://www.google.com/generate_204' : 'https://1.1.1.1/cdn-cgi/trace';
+    
+    document.getElementById('startBtn').disabled = true;
+    document.getElementById('report').style.display = 'none';
+    chartData = []; packetCounter = 0; lastReceivedId = -1; maxBurstLoss = 0; currentBurstLoss = 0;
+    mtuSmallPings = []; mtuLargePings = []; lossIntervals = []; lastLossIndex = -1;
+    
+    let stats = { pings: [], losses: 0, totalSent: 0, startTime: Date.now() };
+
+    // Снимаем чистый базовый пинг в начале для расчета Bufferbloat
+    const preTest = await fetch(target, { mode: 'no-cors' });
+    const tStart = performance.now();
+    await fetch(target, { mode: 'no-cors' });
+    initialPingBaseline = performance.now() - tStart;
+
+    const tester = setInterval(async () => {
+        let elapsed = (Date.now() - stats.startTime) / 1000;
+        if (elapsed >= duration) { clearInterval(tester); processResults(stats); return; }
+
+        stats.totalSent++;
+        const currentPacketId = packetCounter++;
+        const pStart = performance.now();
+        
+        const isLarge = mtuEnabled && (currentPacketId % 2 === 0);
+        const payload = isLarge ? "x".repeat(1200) : "s";
+
+        try {
+            if(isStressActive) fetch(target, {mode:'no-cors'});
+            const ctrl = new AbortController();
+            const timeout = setTimeout(() => ctrl.abort(), 1500);
+
+            await fetch(`${target}?id=${currentPacketId}&v=${payload}`, { mode: 'no-cors', cache: 'no-cache', signal: ctrl.signal });
+            
+            clearTimeout(timeout);
+            const rtt = performance.now() - pStart;
+            stats.pings.push(rtt);
+            if(isLarge) mtuLargePings.push(rtt); else mtuSmallPings.push(rtt);
+            
+            currentBurstLoss = 0;
+            lastReceivedId = currentPacketId;
+            
+            document.getElementById('cur-ping').innerText = rtt.toFixed(1);
+            chartData.push(rtt);
+            drawChart();
+
+            // Bufferbloat Calc
+            const bloat = Math.max(0, rtt - initialPingBaseline);
+            document.getElementById('bloat-score').innerText = bloat.toFixed(1) + "ms";
+
+            const jitter = stats.pings.length > 1 ? Math.abs(rtt - stats.pings[stats.pings.length-2]) : 0;
+            document.getElementById('input-lag').innerText = (rtt + (jitter * 2)).toFixed(1);
+            
+            if(mtuEnabled && mtuLargePings.length > 0 && mtuSmallPings.length > 0) {
+                const sAvg = mtuSmallPings.reduce((a,b)=>a+b)/mtuSmallPings.length;
+                const lAvg = mtuLargePings.reduce((a,b)=>a+b)/mtuLargePings.length;
+                document.getElementById('mtu-impact').innerText = "+" + Math.max(0, lAvg - sAvg).toFixed(1) + "ms";
+            }
+        } catch(e) {
+            stats.losses++;
+            currentBurstLoss++;
+            if(currentBurstLoss > maxBurstLoss) maxBurstLoss = currentBurstLoss;
+            
+            if(lastLossIndex !== -1) {
+                lossIntervals.push(currentPacketId - lastLossIndex);
+            }
+            lastLossIndex = currentPacketId;
+
+            document.getElementById('loss-burst').innerText = maxBurstLoss;
+            const avgGap = lossIntervals.length > 0 ? (lossIntervals.reduce((a,b)=>a+b)/lossIntervals.length).toFixed(0) : "--";
+            document.getElementById('loss-interval').innerText = avgGap;
+        }
+    }, 1000 / tickrate);
+}
+
+function processResults(s) {
+    const avg = s.pings.length > 0 ? s.pings.reduce((a,b)=>a+b,0)/s.pings.length : 0;
+    const stdDev = s.pings.length > 0 ? Math.sqrt(s.pings.map(x => Math.pow(x - avg, 2)).reduce((a, b) => a + b) / s.pings.length) : 0;
+    const lossRate = (s.losses/s.totalSent)*100;
+    const bloatDelta = parseFloat(document.getElementById('bloat-score').innerText);
+    const mtuImpact = parseFloat(document.getElementById('mtu-impact').innerText) || 0;
+
+    document.getElementById('stddev').innerText = stdDev.toFixed(2);
+    document.getElementById('report').style.display = 'block';
+    document.getElementById('startBtn').disabled = false;
+
+    // 1. Отрисовка таблицы стандартов (уже есть в вашем коде)
+    const metrics = [
+        { name: "Jitter (Std Dev)", val: stdDev, unit: "ms", pro: 1, ok: 3, bad: 7 },
+        { name: "Packet Loss", val: lossRate, unit: "%", pro: 0, ok: 0.1, bad: 1 },
+        { name: "Bufferbloat Δ", val: bloatDelta, unit: "ms", pro: 5, ok: 15, bad: 30 }
+    ];
+
+    let tableHTML = "";
+    metrics.forEach(m => {
+        let statusClass = m.val <= m.pro ? 'var(--success)' : m.val <= m.ok ? 'var(--warning)' : 'var(--danger)';
+        tableHTML += `
+            <tr style="border-bottom: 1px solid #30363d;">
+                <td style="padding: 10px; color: #8b949e;">${m.name}</td>
+                <td>< ${m.pro}${m.unit}</td>
+                <td>${m.pro}-${m.ok}${m.unit}</td>
+                <td>> ${m.bad}${m.unit}</td>
+                <td style="color: ${statusClass}; font-weight: bold; background: rgba(255,255,255,0.05);">${m.val.toFixed(2)}${m.unit}</td>
+            </tr>
+        `;
+    });
+    document.getElementById('comparisonTableBody').innerHTML = tableHTML;
+
+    // 2. Логика генерации советов (Recommendations)
+    let recommendations = [];
+    
+    if (stdDev > 3) {
+        recommendations.push("<b>Stable Connection:</b> Switch from Wi-Fi to <b>Ethernet (LAN)</b>. High jitter detected.");
+    }
+    if (lossRate > 0) {
+        recommendations.push("<b>Packet Integrity:</b> Check your cable or call ISP. Even 0.1% loss ruins CS2/Valorant registration.");
+    }
+    if (bloatDelta > 15) {
+        recommendations.push("<b>Bufferbloat:</b> Enable <b>SQM or QoS</b> in your router settings to prioritize gaming traffic.");
+    }
+    if (mtuImpact > 5) {
+        recommendations.push("<b>MTU Issue:</b> Large packets lag. Try setting MTU to 1492 or 1450 in router/Windows.");
+    }
+    if (recommendations.length === 0) {
+        recommendations.push("<b>Elite Status:</b> Your network is ready for Pro-level competition. No changes needed.");
+    }
+
+    // 3. Вывод финального анализа и советов
+    let score = 100 - (lossRate * 50) - (stdDev * 8) - (bloatDelta * 0.4);
+    let grade = score > 95 ? "S" : score > 85 ? "A" : score > 70 ? "B" : "F";
+    
+    document.getElementById('grade-val').innerText = grade;
+    document.getElementById('grade-val').style.color = (grade === "S" || grade === "A") ? "var(--success)" : "var(--danger)";
+
+    document.getElementById('analyticsGrid').innerHTML = `
+        <div class="analysis-box">
+            <h4>Esports Readiness</h4>
+            <p>Grade: <b>${grade}</b></p>
+            <p>Consistency: ${stdDev < 1.5 ? 'Excellent' : 'Poor'}</p>
+        </div>
+        <div class="analysis-box" style="border-left-color: var(--warning);">
+            <h4>Priority Actions to Improve</h4>
+            <ul style="padding-left: 15px; margin: 0;">
+                ${recommendations.map(r => `<li style="font-size: 13px; color: #adbac7; margin-bottom: 8px;">${r}</li>`).join('')}
+            </ul>
+        </div>
+    `;
+
+    window.auditLog = `AUDIT V6.5 PRO\nGrade: ${grade}\nJitter: ${stdDev.toFixed(2)}ms\nLoss: ${lossRate.toFixed(2)}%\nBloat: ${bloatDelta}ms\nMTU Impact: ${mtuImpact}ms`;
+}
+
+function exportAudit() {
+    const blob = new Blob([window.auditLog], {type: 'text/plain'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'gaming_network_pro_report.txt'; a.click();
+}
+</script>
+</body>
+</html>
